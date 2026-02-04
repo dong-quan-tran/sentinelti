@@ -50,3 +50,51 @@ def build_dummy_dataset() -> Tuple[np.ndarray, np.ndarray, List[str]]:
     y = np.array([label for _, label in urls], dtype=int)
 
     return X, y, numeric_keys
+
+import pandas as pd  # add at the top with other imports
+
+
+def build_real_dataset(
+    csv_path: str,
+    url_column: str = "url",
+    label_column: str = "label",
+    benign_label_value=0,
+    malicious_label_value=1,
+    max_samples: int | None = None,
+) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    """
+    Build a dataset from a labeled CSV of URLs.
+
+    Assumes the CSV has at least:
+        - a URL column (default: 'url')
+        - a label column (default: 'label') where
+          benign_label_value = benign, malicious_label_value = malicious.
+    """
+
+    df = pd.read_csv(csv_path)
+
+    # Filter to only benign and malicious labels we care about.
+    df = df[df[label_column].isin([benign_label_value, malicious_label_value])]
+
+    if max_samples is not None and len(df) > max_samples:
+        df = df.sample(n=max_samples, random_state=42)
+
+    urls = df[url_column].astype(str).tolist()
+    labels = df[label_column].apply(
+        lambda v: 0 if v == benign_label_value else 1
+    ).tolist()
+
+    feature_dicts = [extract_features(u) for u in urls]
+    numeric_keys = [k for k in feature_dicts[0].keys() if not k.startswith("_")]
+
+    X = np.array([[fd[k] for k in numeric_keys] for fd in feature_dicts], dtype=float)
+    y = np.array(labels, dtype=int)
+
+    return X, y, numeric_keys
+
+    df = df[df[label_column].isin([benign_label_value, malicious_label_value])]
+
+    if df.empty:
+        raise ValueError(
+            f"No rows found matching labels {benign_label_value} / {malicious_label_value} in column '{label_column}'"
+        )
