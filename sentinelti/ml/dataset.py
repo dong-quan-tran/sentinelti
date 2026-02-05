@@ -5,6 +5,7 @@ from typing import List, Tuple
 import numpy as np
 import pandas as pd
 from sentinelti.ml.features import extract_features
+from sentinelti.ml.urlhaus_dataset import fetch_urlhaus_malicious
 
 
 # Temporary benign examples; we'll replace with real data later.
@@ -99,3 +100,57 @@ def build_real_dataset(
         raise ValueError(
             f"No rows found matching labels {benign_label_value} / {malicious_label_value} in column '{label_column}'"
         )
+
+def build_urlhaus_plus_benign_dataset(
+    benign_csv_path: str,
+    benign_label_column: str = "label",
+    benign_url_column: str = "url",
+    benign_label_value: str = "benign",
+    max_malicious: int | None = 1000,
+    max_benign: int | None = 1000,
+) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    """
+    Build a dataset combining:
+      - malicious URLs from URLhaus-backed indicators
+      - benign URLs from a CSV (e.g. urldata.csv)
+    """
+
+    # 1) Malicious from URLhaus (DB)
+    df_mal = fetch_urlhaus_malicious(max_samples=max_malicious)
+
+    # 2) Benign from CSV
+    df_benign = pd.read_csv(benign_csv_path)
+    df_benign = df_benign[df_benign[benign_label_column] == benign_label_value]
+
+    if df_benign.empty:
+        raise ValueError(
+            f"No benign rows found in {benign_csv_path} with label '{benign_label_value}'"
+        )
+
+    if max_benign is not None and len(df_benign) > max_benign:
+        df_benign = df_benign.sample(n=max_benign, random_state=42)
+
+    df_benign = df_benign.rename(
+        columns={
+            benign_url_column: "url",
+        }
+    )
+    df_benign = df_benign[["url"]].copy()
+    df_benign["label"] = "benign"
+
+    # 3) Combine
+    df = pd.concat([df_mal, df_benign], ignore_index=True)
+
+    # Map labels to 0/1
+    df["y"] = df["label"].apply(lambda v: 0 if v == "benign" else 1)
+
+    urls = df["url"].astype(str).tolist()
+    labels = df["y"].tolist()
+
+    feature_dicts = [extract_features(u) for u in urls]
+    numeric_keys = [k for k in feature_dicts[0].keys() if not k.startswith("_")]
+
+    X = np.array([[fd[k] for k in numeric_keys] for fd in feature_dicts], dtype=float)
+    y = np.array(labels, dtype=int)
+
+    return X, y, numeric_keys
