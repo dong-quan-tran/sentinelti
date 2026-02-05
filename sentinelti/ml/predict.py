@@ -18,7 +18,7 @@ def load_model():
     return artifact["model"], artifact["feature_names"]
 
 
-MALICIOUS_THRESHOLD = 0.9  # or start with 0.85–0.9
+MALICIOUS_THRESHOLD = 0.75  # or start with 0.85–0.9
 
 
 def predict_url(url: str) -> Tuple[int, float]:

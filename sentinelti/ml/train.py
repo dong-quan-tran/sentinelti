@@ -7,7 +7,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 
-from sentinelti.ml.dataset import build_dummy_dataset, build_real_dataset
+from sentinelti.ml.dataset import build_dummy_dataset, build_real_dataset, build_urlhaus_plus_benign_dataset
 
 
 
@@ -20,8 +20,19 @@ def train_url_model(
     use_real_data: bool = False,
     csv_path: str | None = None,
     max_samples: int | None = None,
+    use_urlhaus: bool = False,
+    urlhaus_max_malicious: int | None = 1000,
+    urlhaus_max_benign: int | None = 1000,
 ) -> None:
-    if use_real_data:
+    if use_urlhaus:
+        if csv_path is None:
+            raise ValueError("csv_path is required when use_urlhaus=True (for benigns)")
+        X, y, feature_names = build_urlhaus_plus_benign_dataset(
+            benign_csv_path=csv_path,
+            max_malicious=urlhaus_max_malicious,
+            max_benign=urlhaus_max_benign,
+        )
+    elif use_real_data:
         if csv_path is None:
             raise ValueError("csv_path is required when use_real_data=True")
         X, y, feature_names = build_real_dataset(
@@ -59,9 +70,12 @@ def train_url_model(
 
 
 if __name__ == "__main__":
+    # Training using URLhaus malicious + urldata.csv benign
     train_url_model(
-        use_real_data=True,
-        csv_path="data/urldata.csv",
-        max_samples=1000,
+        use_urlhaus=True,
+        csv_path="data/urldata.csv",  # benign source
+        urlhaus_max_malicious=1000,
+        urlhaus_max_benign=1000,
     )
+
 
