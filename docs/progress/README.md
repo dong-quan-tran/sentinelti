@@ -209,3 +209,76 @@ So, the model is performing very well on that dataset.
   - Re-ran tests:
     - Big-brand URLs: now label 0, with malicious probabilities still ~0.76 (visible as a “risk score” but not auto-blocking).
     - Obvious phish: still label 1 with probability ~1.0.
+
+
+
+## 2026-02-05 – Day Progress (Threat-Intel URL Classifier + ML)
+
+**1. Integrated URLhaus-backed malicious data**
+
+- Implemented a new helper module to load malicious URLs directly from the existing SQLite threat-intel database (URLhaus feed already ingested into `feeds` and `indicators` tables).  
+- The helper queries `indicators` for `type='url'` and the `urlhaus` feed, returns a DataFrame with `url` and `label="malicious"`.  
+- Added basic validation: raises an error if no URLhaus indicators are found.
+
+![alt text](<Screenshot 2026-02-05 130003.png>)
+
+***
+
+**2. Built combined URLhaus + benign dataset builder**
+
+- Extended the dataset layer with a new function to:
+  - Load malicious URLs from the URLhaus-backed DB helper.  
+  - Load benign URLs from the existing `data/urldata.csv` (filtering on `label="benign"`).  
+  - Optionally subsample both sides (max malicious, max benign) for balanced training size.  
+- Normalized both sources to a unified schema (`url`, `label`), mapped labels to `0 = benign`, `1 = malicious`.  
+- Reused the existing URL feature extractor to build `X` (feature matrix), `y` (labels), and `feature_names`.
+
+![alt text](<Screenshot 2026-02-05 130053.png>)
+
+***
+
+**3. Extended training pipeline to support URLhaus mode**
+
+- Updated the training script to support a new mode:  
+  - `use_urlhaus=True` → trains on “URLhaus malicious + benign CSV”, instead of only `urldata.csv` or dummy data.  
+- Training flow:
+  - Build combined dataset via the new builder.  
+  - Stratified train/test split (70/30).  
+  - Train logistic regression with `max_iter=1000`.  
+  - Print classification report and save model artifact (`url_classifier.joblib` with model + feature names).
+
+![alt text](<Screenshot 2026-02-05 130157.png>)
+
+***
+
+**4. Ran URLhaus ingestion and trained the new model**
+
+- Installed the missing HTTP client library and successfully ran the URLhaus ingestion job to populate the local DB with recent URLhaus indicators.  
+- Executed the updated training entrypoint in URLhaus mode.  
+- Observed excellent evaluation metrics on the holdout set (balanced benign/malicious sample):
+  - Precision, recall, and F1 for both benign and malicious ≈ 0.99.  
+  - Overall accuracy ≈ 0.99, confirming the combined dataset and pipeline are working well.
+
+![alt text](<Screenshot 2026-02-05 130157-1.png>)
+
+***
+
+**5. Evaluated and tuned prediction behavior**
+
+- Re-ran `predict_url` on a mix of real-world benign and phishy URLs (Google, Microsoft, Apple, GitHub, NYTimes, and an obvious phishing-style URL).  
+- Confirmed:
+  - Phishing-style URL receives the highest malicious probability.  
+  - Clearly benign site (NYTimes) has a very low malicious probability.  
+  - Big-brand homepages sit in a mid-to-high probability band, close to the phishing URL, revealing that the model’s scores are well ranked but tightly clustered.  
+- Experimented with different decision thresholds for labeling (0/1) and concluded:
+  - The model and prediction code are correct.  
+  - With the current dataset size and feature set, predictions are generally good but not perfectly calibrated; threshold choice is an explicit trade-off between catching phish and avoiding false positives on some benign big-brand domains.
+
+![alt text](<Screenshot 2026-02-05 130330.png>)
+
+***
+
+**Summary for today**
+
+- Moved from a generic CSV-trained model to a **Threat-Intel-driven model** that uses URLhaus data via the project’s own TI database.  
+- Established a reusable path from **URLhaus → DB → combined dataset → trained model → `predict_url`**, with strong test metrics and initial threshold tuning.
