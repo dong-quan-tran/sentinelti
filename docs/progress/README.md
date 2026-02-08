@@ -282,3 +282,59 @@ So, the model is performing very well on that dataset.
 
 - Moved from a generic CSV-trained model to a **Threat-Intel-driven model** that uses URLhaus data via the project’s own TI database.  
 - Established a reusable path from **URLhaus → DB → combined dataset → trained model → `predict_url`**, with strong test metrics and initial threshold tuning.
+
+---Log: 02/08/2026
+
+## Environment and Setup
+
+- Repaired Python installation on Windows and ensured system uses Python 3.11.  
+- Recreated clean virtual environment (`.venv`) and reinstalled dependencies from `requirements.txt`.  
+- Verified database initialization and URLhaus ingestion complete successfully.  
+![alt text](<Screenshot 2026-02-08 123523.png>)
+
+***
+
+## Model Training and Baseline Results
+
+- Trained URL classification model on ingested URLhaus data.  
+- Achieved ~99% accuracy, precision, and recall on a 600‑sample holdout set (balanced benign/malicious).  
+- Saved trained model to `sentinelti/models/url_classifier.joblib`.  
+
+![alt text](<Screenshot 2026-02-08 123623.png>)
+
+***
+
+## CLI Scoring and Sanity Checks
+
+- Confirmed `score-url` and `score-urls` commands work end‑to‑end.  
+- Tested with clearly benign URLs (Google, Microsoft, BBC) and clearly malicious / phishing‑style URLs.  
+- Observed sensible `label` and `prob_malicious` outputs for basic cases.  
+
+![alt text](<Screenshot 2026-02-08 123656.png>)
+
+***
+
+## Heuristic Risk Layer on Top of ML
+
+- Implemented `enrich_score()` helper to wrap `score_url` results.  
+- Added heuristic features:
+  - Detection of `@` in authority part (obfuscation).  
+  - Raw IP hosts.  
+  - Suspicious tokens (e.g., `login`, `verify`, `update`, `account`, `paypal`, `bank`, `appleid`).  
+  - Uncommon TLDs (e.g., `.xyz`, `.top`, `.club`, `.click`, `.link`).  
+- Introduced `final_label` (`benign`, `suspicious`, `malicious`) and `risk` (`low`, `medium`, `high`) in CLI output.  
+- Example: `http://update-paypal.com@evil.com/secure` now returns `final_label='suspicious'` with clear reasons.  
+
+![alt text](<Screenshot 2026-02-08 123849.png>)
+
+***
+
+## Dependency and Test Improvements
+
+- Added `tldextract` to `requirements.txt` for URL parsing and TLD handling.  
+- Created `tests/test_ml_service.py` with basic unit tests for:
+  - `score_url` – structure and types of returned dict.  
+  - `score_urls` – correct result count for batch input.  
+- Installed `pytest` in the venv and successfully ran the tests via `python -m pytest`.  
+
+***
