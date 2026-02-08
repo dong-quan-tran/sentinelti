@@ -2,3 +2,4 @@ scikit-learn
 joblib
 pandas
 requests
+tldextract>=5.0.0
