@@ -1,4 +1,12 @@
-# sentinelti/heuristics.py
+"""
+Heuristic URL analysis for SentinelTi.
+
+This module inspects a URL for phishing and malware indicators
+(e.g. raw IP hosts, suspicious tokens, uncommon TLDs) and returns
+a numeric risk score plus human-readable reasons to enrich the
+ML classifier output.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
