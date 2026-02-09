@@ -34,7 +34,7 @@ def enrich_score(url: str) -> Dict[str, Any]:
     p = float(ml_result["prob_malicious"])
     h = float(heur.score)
 
-    # Initial thresholds (we'll tune later on your manual eval set)
+    # Initial thresholds (we'll tune later on our manual eval set)
     if p >= 0.95 or h >= 3.0:
         final_label = "malicious"
         risk = "high"

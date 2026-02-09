@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import argparse
 
 from sentinelti.scoring import enrich_score
@@ -41,7 +42,16 @@ def main() -> None:
         "url",
         help="URL to score",
     )
-
+    score_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output result as JSON instead of a Python dict.",
+    )
+    score_parser.add_argument(
+        "--json-pretty",
+        action="store_true",
+        help="Pretty-print JSON output (implies --json).",
+    )
     # score-urls command (optional batch mode)
     score_batch_parser = subparsers.add_parser(
         "score-urls", help="Score multiple URLs (space-separated) with the ML classifier"
@@ -51,7 +61,16 @@ def main() -> None:
         nargs="+",
         help="One or more URLs to score",
     )
-
+    score_batch_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output results as JSON list instead of line-by-line dicts.",
+    )
+    score_batch_parser.add_argument(
+        "--json-pretty",
+        action="store_true",
+        help="Pretty-print JSON output (implies --json).",
+    )
     args = parser.parse_args()
 
     if args.command == "init":
@@ -64,15 +83,24 @@ def main() -> None:
             upsert_indicators_from_urlhaus()
             print("Done.")
 
-        elif args.command == "score-url":
-            result = enrich_score(args.url)
+    elif args.command == "score-url":
+        result = enrich_score(args.url)
+        
+        if args.json or args.json_pretty:
+            indent = 2 if args.json_pretty else None               
+            print(json.dumps(result, indent=indent))
+        else:
             print(result)
 
-        elif args.command == "score-urls":
-            for url in args.urls:
-                result = enrich_score(url)
-                print(result)
+    elif args.command == "score-urls":
+        results = [enrich_score(url) for url in args.urls]
 
+        if args.json or args.json_pretty:
+            indent = 2 if args.json_pretty else None
+            print(json.dumps(results, indent=indent))
+        else:
+            for result in results:
+                print(result)
 
     else:
         parser.print_help()
@@ -80,3 +108,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
