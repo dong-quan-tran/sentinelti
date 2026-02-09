@@ -5,10 +5,6 @@ import argparse
 
 from sentinelti.scoring import enrich_score
 
-#from urllib.parse import urlparse
-#import tldextract
-#from .scoring import enrich_score
-
 from .db import init_db
 from .feeds.urlhaus import upsert_indicators_from_urlhaus
 from sentinelti.ml.service import score_url, score_urls

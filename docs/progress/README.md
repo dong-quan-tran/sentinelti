@@ -338,3 +338,148 @@ So, the model is performing very well on that dataset.
 - Installed `pytest` in the venv and successfully ran the tests via `python -m pytest`.  
 
 ***
+
+## Progress log – 2026‑02‑09
+
+Today was focused on turning SentinelTi’s URL scoring into a clean, reusable core and making the CLI output more script‑ and API‑friendly.
+
+***
+
+### 1. Added a dedicated heuristic analysis module
+
+**What I did**
+
+- Created `sentinelti/heuristics.py`.
+- Implemented `analyze_url(url)` which:
+  - Parses the URL (host, path, query, TLD).
+  - Applies several heuristic rules:
+    - Raw IP address as host.
+    - `@` in the authority part.
+    - Suspicious tokens in the path/query (e.g. `login`, `verify`, `payment`, `account`, `paypal`, `appleid`, etc.).
+    - Uncommon TLDs (e.g. `.xyz`, `.top`, `.club`, `.click`, `.link`, etc.).
+    - Very long domain (subdomain + domain).
+    - Deep path (many path segments).
+  - For each rule that fires, increases a numeric heuristic score and adds a human‑readable reason.
+  - Returns a `HeuristicResult` with:
+    - `score` (float),
+    - `reasons` (list of explanation strings),
+    - `features` (small dict with `tld`, `domain_length`, `path_depth`, `raw_score`).
+
+**Why / purpose**
+
+- Gives SentinelTi a rule‑based “gut check” layer in addition to the ML model.
+- Makes results more explainable: we can say *why* a URL looks risky.
+- Keeps heuristic logic isolated and testable, instead of scattering it in the CLI.
+
+![alt text](<Screenshot 2026-02-09 151356.png>)
+
+***
+
+### 2. Added a central scoring/enrichment module
+
+**What I did**
+
+- Created `sentinelti/scoring.py`.
+- Implemented `enrich_score(url)` which:
+  - Calls the existing ML service (e.g. `ml.service.score_url(url)`) to get:
+    - `url`, `label`, `prob_malicious`.
+  - Calls `analyze_url(url)` to get heuristic `score`, `reasons`, and `features`.
+  - Combines ML probability and heuristic score with simple thresholds to decide:
+    - `final_label`: `"benign"`, `"suspicious"`, or `"malicious"`.
+    - `risk`: `"low"`, `"medium"`, or `"high"`.
+  - Ensures `reasons` is populated:
+    - Uses heuristic reasons when present.
+    - Falls back to generic messages like “Flagged primarily by the ML classifier score.” when needed.
+  - Returns a single enriched dict containing:
+    - `url`, `label`, `prob_malicious`,
+    - `heuristic` (nested dict with score/reasons/features),
+    - `final_label`, `risk`, and top‑level `reasons`.
+
+**Why / purpose**
+
+- Creates one **single source of truth** for “how SentinelTi scores a URL”.
+- Separates concerns:
+  - ML model serving (`ml.service`) stays model‑focused.
+  - Heuristics stay in `heuristics.py`.
+  - Combination and decisions live in `scoring.py`.
+- Makes it easy for the CLI, tests, and future FastAPI API to all use the same scoring logic.
+
+![alt text](<Screenshot 2026-02-09 151758.png>)
+
+***
+
+### 3. Refactored the CLI to use the central scoring
+
+**What we did**
+
+- Updated `sentinelti/cli.py`:
+  - Removed inline heuristic logic and the old CLI‑local `enrich_score(url, score_result)` function.
+  - Stopped importing URL parsing/heuristics directly in the CLI.
+  - Imported and used the shared `enrich_score(url)` instead.
+- Now:
+  - `score-url`:
+    - Calls `enrich_score(args.url)`.
+    - Prints the enriched result.
+  - `score-urls`:
+    - Loops over `args.urls`, calls `enrich_score(url)` for each.
+    - Prints each enriched result.
+
+**Why / purpose**
+
+- Makes the CLI a **thin wrapper** around the core scoring logic.
+- Guarantees that CLI and future API will always use the exact same scoring and heuristics.
+- Simplifies future changes: tuning thresholds or adding new heuristics only requires updating `heuristics.py` / `scoring.py`, not the CLI.
+
+![alt text](<Screenshot 2026-02-09 151954.png>)
+
+***
+
+### 4. Added JSON and pretty‑JSON output to the CLI
+
+**What we did**
+
+- Extended `score-url` to accept:
+  - `--json`: output the enriched result as a compact JSON object.
+  - `--json-pretty`: output the same JSON but nicely formatted with indentation.
+- Extended `score-urls` to accept:
+  - `--json`: output a JSON array of enriched results.
+  - `--json-pretty`: pretty‑print that array.
+- Under the hood:
+  - Uses `json.dumps(result, indent=None)` for `--json`.
+  - Uses `json.dumps(result, indent=2)` for `--json-pretty`.
+
+**Why / purpose**
+
+- Makes SentinelTi much easier to integrate into scripts and other tools:
+  - You can pipe CLI output into `jq`, log pipelines, or custom scripts without parsing Python dicts.
+- Aligns with how the future FastAPI endpoints will behave (they will also speak JSON).
+- Improves usability when inspecting results manually (`--json-pretty` is much easier to read).
+
+![alt text](<Screenshot 2026-02-09 152100.png>)
+***
+
+### 5. Added a basic unit test for the enriched scoring
+
+**What we did**
+
+- Created `tests/test_scoring.py` with a simple test:
+  - Calls `enrich_score("http://example.com")`.
+  - Asserts that keys like `url`, `label`, `prob_malicious`, `final_label`, `risk`, `reasons`, and `heuristic` are present.
+  - Checks that `reasons` is a list and `heuristic` is a dict.
+- Ran `python -m pytest` and confirmed all tests pass (including the existing ML service tests).
+
+**Why / purpose**
+
+- Ensures the new central scoring function is covered by tests.
+- Gives an early warning if the structure of the enriched result changes unexpectedly.
+- Helps keep the public output contract stable as the project grows.
+
+![alt text](<Screenshot 2026-02-09 152409.png>)
+
+***
+
+Overall, today’s work:
+
+- Centralized the “intelligence” of SentinelTi into `heuristics.py` and `scoring.py`.
+- Turned the CLI into a thin, reusable front‑end.
+- Added JSON output so SentinelTi is ready for automation and a future HTTP API.
