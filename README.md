@@ -19,7 +19,7 @@ Python dependencies are listed in `requirements.txt` and installed into a virtua
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/<dong-quan-tran>/SentinelTi.git
+git clone https://github.com/dong-quan-tran/SentinelTi.git
 cd SentinelTi
 ```
 
