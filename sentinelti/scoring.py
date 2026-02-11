@@ -34,19 +34,35 @@ def enrich_score(url: str) -> Dict[str, Any]:
     p = float(ml_result["prob_malicious"])
     h = float(heur.score)
 
-    # Initial thresholds (we'll tune later on our manual eval set)
-    if p >= 0.95 or h >= 3.0:
+    # Strong ML + strong heuristics => malicious / high
+    if (p >= 0.95 and h >= 2.0) or h >= 3.5:
         final_label = "malicious"
         risk = "high"
+
+    # Clear benign: very low ML, no heuristic signals
+    elif p <= 0.05 and h == 0.0:
+        final_label = "benign"
+        risk = "low"
+
+    # Mostly benign but some mild heuristic noise
+    elif p <= 0.10 and h < 1.5:
+        final_label = "benign"
+        risk = "low"
+
+    # Medium risk: either ML is moderately high or heuristics indicate clear phishing structure
     elif p >= 0.80 or h >= 1.5:
         final_label = "suspicious"
         risk = "medium"
-    elif p <= 0.05 and h == 0:
-        final_label = "benign"
-        risk = "low"
+
+    # Default: suspicious if we have any heuristic score, otherwise low-risk benign
     else:
-        final_label = "suspicious"
-        risk = "medium"
+        if h > 0.0:
+            final_label = "suspicious"
+            risk = "medium"
+        else:
+            final_label = "benign"
+            risk = "low"
+
 
     reasons = list(heur.reasons)
     if final_label == "benign" and not reasons:
