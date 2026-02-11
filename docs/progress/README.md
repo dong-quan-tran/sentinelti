@@ -483,3 +483,147 @@ Overall, today’s work:
 - Centralized the “intelligence” of SentinelTi into `heuristics.py` and `scoring.py`.
 - Turned the CLI into a thin, reusable front‑end.
 - Added JSON output so SentinelTi is ready for automation and a future HTTP API.
+
+## Progress log – 2026‑02‑10
+
+***
+
+### 1. Added `score-file` CLI for batch scoring
+
+**What we did**
+
+- Extended `sentinelti/cli.py` with a new `score-file` subcommand.
+- `score-file`:
+  - Accepts an input file path (`.txt` or `.csv`).
+  - Supports `--input-format auto|txt|csv` (auto detects by extension).
+  - Reads:
+    - Text: one URL per line.
+    - CSV: URLs from a configurable `--url-column` (default `url`).
+  - Calls `enrich_score(url)` for each URL to get ML + heuristic enrichment.
+  - Supports `--output` and `--output-format csv|json` plus `--json-pretty` for human‑friendly JSON.
+- CSV output flattens the core fields:
+  - `url`, `label`, `prob_malicious`, `final_label`, `risk`, `reasons` (joined as a string).
+- JSON output returns a list of full enriched result objects (same schema as `score-urls --json`).
+
+**Why / purpose**
+
+- Enables **batch analysis** of URL lists from text files or spreadsheets.
+- Makes it easy to run SentinelTi on real‑world URL dumps without manual copy/paste.
+- Reuses `enrich_score` so behavior is consistent with the rest of the tool.
+- Lays the groundwork for:
+  - Bulk testing against new datasets.
+  - Easy input/output for scripts and other tooling.
+
+![alt text](<Screenshot 2026-02-11 101247.png>)
+
+***
+
+### 2. Created a manual evaluation dataset
+
+**What we did**
+
+- Added `docs/manual_eval_urls.csv` with columns:
+
+  ```csv
+  url,label,notes
+  ```
+
+- Seeded it with a diverse, realistic mix of URLs:
+  - Clearly benign:
+    - Well‑known sites (Google, Wikipedia, GitHub, banks, streaming services).
+    - Legitimate login pages (Google, Microsoft, Netflix, PayPal, Amazon).
+    - Normal content pages, account settings, support/contact pages.
+    - Corporate/University portals, VPN URLs, webmail, tracking links, CDN/script URLs.
+  - Clearly malicious:
+    - Raw IP hosts with `/login` or `/secure` paths.
+    - Weird TLD + `login`/`update`/`account` tokens (e.g., `.xyz`, `.top`, `.click`, `.link`, `.club`).
+    - Domains impersonating brands (PayPal, Apple ID, Office365, banks, Dropbox, Netflix).
+    - Typosquats (e.g., `go0gle`, `faceb0ok-security`).
+    - URLs with `@` in the authority part for obfuscation.
+    - Phishing‑style query strings (`verify-account`, `update-your-password`, etc.).
+- Each row has a `notes` field describing why the URL is considered benign or malicious.
+
+**Why / purpose**
+
+- Provides a **hand‑curated test set** to evaluate the end‑to‑end behavior of `final_label` and `risk`, not just the ML model in isolation.
+- Lets you see how SentinelTi handles:
+  - Legit but “scary‑looking” URLs (real login pages, long paths).
+  - Obvious phishing constructs.
+- Serves as a stable reference set to catch regressions as you tweak heuristics or retrain the model.
+
+![alt text](<Screenshot 2026-02-11 101753.png>)
+
+***
+
+### 3. Added a manual evaluation runner module
+
+**What we did**
+
+- Created `sentinelti/manual_eval.py` that:
+
+  - Locates `docs/manual_eval_urls.csv` from the repo root.
+  - Reads each row, skipping any without `url` or `label`.
+  - Calls `enrich_score(url)` for each URL.
+  - Compares `true_label` (from CSV) with `r["final_label"]` (from SentinelTi).
+  - Aggregates confusion counts:
+
+    ```text
+    Confusion (true_label -> final_label):
+      benign     -> benign    : ...
+      benign     -> suspicious: ...
+      benign     -> malicious : ...
+      malicious  -> benign    : ...
+      malicious  -> suspicious: ...
+      malicious  -> malicious : ...
+    ```
+
+  - Prints “Sample disagreements” with details:
+    - URL
+    - `true_label`
+    - `final_label`
+    - `risk`
+    - `prob_malicious`
+    - `reasons`
+    - `notes` from the CSV.
+
+- Can be run via:
+
+  ```bash
+  python -m sentinelti.manual_eval
+  ```
+
+**Why / purpose**
+
+- Gives a **fast feedback loop** for tuning:
+  - Immediately shows where SentinelTi is too aggressive (benign → suspicious/malicious) or too lenient (malicious → benign).
+- Helps you see the interaction between:
+  - ML probability,
+  - heuristic score,
+  - and the final label mapping logic in `scoring.py`.
+- Acts as a regression test:
+  - After changing heuristics or thresholds, you can re‑run and see if behavior improved or got worse on this curated set.
+
+![alt text](<Screenshot 2026-02-11 101850.png>)
+
+***
+
+### 4. First round of threshold/heuristic tuning (light)
+
+**What we did**
+
+- Ran `manual_eval` and examined:
+  - Many benign URLs (especially legit logins and blogs) were labeled `suspicious` or even `malicious`.
+  - Some malicious URLs were not yet being bumped to `malicious`.
+- Started tuning by:
+  - Planning adjustments to:
+    - **Heuristic weights** (e.g., making `login` less heavy, making deep path less aggressive).
+    - **Decision thresholds** in `scoring.py` to:
+      - Treat low `prob_malicious` + weak heuristics as `benign`.
+      - Require stronger combined evidence for `malicious`.
+
+**Why / purpose**
+
+- Moves SentinelTi away from arbitrary rules toward **data‑informed thresholds**.
+- Helps align the final labels with what you, as the tool author, consider reasonable behavior on realistic URLs.
+
+![alt text](<Screenshot 2026-02-11 101938.png>)
