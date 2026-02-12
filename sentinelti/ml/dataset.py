@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import List, Tuple
+from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
@@ -83,6 +84,20 @@ def build_real_dataset(
         lambda v: 0 if v == benign_label_value else 1
     ).tolist()
 
+    # Filter out invalid URLs
+    clean_urls = []
+    clean_labels = []
+    for u, lab in zip(urls, labels):
+        try:
+            _ = urlparse(u)  # will raise ValueError on weird bracketed hosts
+        except ValueError:
+            continue
+        clean_urls.append(u)
+        clean_labels.append(lab)
+
+    urls = clean_urls
+    labels = clean_labels
+
     feature_dicts = [extract_features(u) for u in urls]
     numeric_keys = [k for k in feature_dicts[0].keys() if not k.startswith("_")]
 
@@ -91,6 +106,8 @@ def build_real_dataset(
 
     print(f"Loaded {len(df)} rows from {csv_path}")
     print(df[label_column].value_counts())
+    print(f"Dropped {len(df) - len(urls)} invalid URLs before feature extraction")
+
 
     return X, y, numeric_keys
 
@@ -154,3 +171,11 @@ def build_urlhaus_plus_benign_dataset(
     y = np.array(labels, dtype=int)
 
     return X, y, numeric_keys
+
+def _is_valid_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+        # Require at least a scheme and netloc or something that looks like a domain/IP
+        return bool(parsed.scheme) and bool(parsed.netloc)
+    except ValueError:
+        return False
