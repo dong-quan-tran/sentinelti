@@ -17,7 +17,7 @@ from .scoring import enrich_score
 def main() -> None:
     # repo root = sentinelti/.. (adjust if your structure differs)
     root = Path(__file__).resolve().parents[1]
-    eval_path = root / "docs" / "manual_eval_urls.csv"
+    eval_path = root / "data" / "manual_eval_urls.csv"
 
     if not eval_path.exists():
         raise SystemExit(f"Manual eval file not found: {eval_path}")
