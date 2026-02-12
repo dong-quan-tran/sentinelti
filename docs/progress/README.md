@@ -793,3 +793,77 @@ Today’s work focused on adding a real HTTP API on top of SentinelTi so other t
 
 - Validates that the integration between FastAPI, Uvicorn, and your scoring code works end‑to‑end.
 - Provides a working local API instance ready for future deployment to a cloud host.
+
+--- Progress log: 02/12/2026
+
+1) Integrated Kaggle URL dataset
+Wired the “malicious and benign URLs” Kaggle dataset into the ML pipeline as data/urldata.csv using url and label (benign/malicious).​​
+
+Verified label distribution: benign = 345,738, malicious = 104,438.​
+
+![alt text](<Screenshot 2026-02-12 145343.png>)
+
+2) Dataset loading and sanitization (dataset.py)
+Implemented build_real_dataset and build_urlhaus_plus_benign_dataset to load arbitrary CSV paths instead of hardcoded filenames.​
+
+Added a small URL validation step to drop malformed URLs before feature extraction; training run dropped 1 invalid URL out of ~450k rows.​​
+
+![alt text](<Screenshot 2026-02-12 145531.png>)
+
+3) Training pipeline refactor (train.py)
+Refactored training code to use a shared load_dataset_for_training helper that supports:
+
+Kaggle‑only (use_real_data=True).
+
+URLHaus malicious + Kaggle benign (use_urlhaus=True).
+
+Dummy URLs (for quick tests).
+
+Cleaned up train_url_model to remove hardcoded paths and rely on csv_path for both Kaggle and URLHaus modes.​
+
+![alt text](<Screenshot 2026-02-12 145721.png>)
+
+4) Logistic regression baseline training
+Trained a logistic regression classifier on Kaggle data (≈450k rows) using engineered URL features.
+
+Achieved:
+
+Benign: precision 0.95, recall 0.99.
+
+Malicious: precision 0.97, recall 0.81.
+
+Overall accuracy: 0.95.​
+
+![alt text](<Screenshot 2026-02-12 150651.png>)
+
+5) XGBoost model integration and training
+Added XGBoost dependency and integrated XGBClassifier into train.py as train_url_model_xgb using the same features and dataset loader.​​
+
+Used class imbalance handling via scale_pos_weight to account for the ~3.3:1 benign:malicious ratio.
+
+Trained an XGBoost model on Kaggle data and achieved:
+
+Benign (class 0): precision 0.97, recall 0.96.
+
+Malicious (class 1): precision 0.88, recall 0.91.
+
+Overall accuracy: 0.95.
+
+Saved the new model artifact to sentinelti/models/url_classifier.joblib, compatible with existing prediction code.
+
+![alt text](<Screenshot 2026-02-12 151006.png>)
+
+6) CLI UX improvements for training
+Added argparse CLI interface to train.py with:
+
+--model {logreg,xgb} to select the classifier.
+
+--source {kaggle,urlhaus,dummy} to select the data source.
+
+--csv-path, --max-samples, --urlhaus-max-malicious, --urlhaus-max-benign flags to control inputs.​​
+
+Now supports commands like:
+
+python -m sentinelti.ml.train --model xgb --source kaggle --csv-path data/urldata.csv
+
+python -m sentinelti.ml.train --model xgb --source urlhaus --csv-path data/urldata.csv

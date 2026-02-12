@@ -195,4 +195,69 @@ SentinelTi combines a trained ML classifier with rule‑based heuristics to deci
      - Reuse the same `enrich_score(url)` function.
      - Expose endpoints like `/health`, `/score-url`, and `/score-urls` for programmatic access.
 
+
+***
+
+## Training the URL classifier
+
+SentinelTi ships with a small ML pipeline under `sentinelti/ml/` that trains a URL
+classifier from either the Kaggle dataset or a combination of URLhaus + benign URLs.
+
+### Prerequisites
+
+- Dependencies installed:
+
+  ```bash
+  pip install -r requirements.txt
+  ```
+
+- A labeled URL CSV (e.g. Kaggle “malicious and benign URLs”) placed at:
+
+  ```text
+  data/urldata.csv
+  ```
+
+  Required columns:
+
+  - `url`
+  - `label` with values `benign` or `malicious`
+
+### CLI usage
+
+Training is controlled via `--model` and `--source` flags:
+
+- Train **XGBoost** on Kaggle:
+
+  ```bash
+  python -m sentinelti.ml.train --model xgb --source kaggle --csv-path data/urldata.csv
+  ```
+
+- Train **Logistic Regression** on Kaggle:
+
+  ```bash
+  python -m sentinelti.ml.train --model logreg --source kaggle --csv-path data/urldata.csv
+  ```
+
+- Train **XGBoost** on URLhaus malicious + Kaggle benign:
+
+  ```bash
+  python -m sentinelti.ml.train --model xgb --source urlhaus --csv-path data/urldata.csv
+  ```
+
+- Use the small built‑in dummy dataset (for quick tests):
+
+  ```bash
+  python -m sentinelti.ml.train --model logreg --source dummy
+  ```
+
+Model artifacts are saved to:
+
+```text
+sentinelti/models/url_classifier.joblib
+```
+
+and are loaded by the SentinelTi ML scoring service (`score_url`) and the
+central `enrich_score(url)` logic.
+```
+
 In short, SentinelTi ingests real threat intel, uses an ML model for core classification, enhances it with explainable heuristics, and exposes the combined result via a clean CLI (and soon an HTTP API).
