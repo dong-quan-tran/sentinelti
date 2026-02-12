@@ -627,3 +627,169 @@ Overall, today’s work:
 - Helps align the final labels with what you, as the tool author, consider reasonable behavior on realistic URLs.
 
 ![alt text](<Screenshot 2026-02-11 101938.png>)
+
+## Progress log – 2026‑02‑11
+
+Today’s work focused on adding a real HTTP API on top of SentinelTi so other tools can programmatically score URLs.
+
+***
+
+### 1. Installed API dependencies
+
+**What we did**
+
+- Confirmed and/or installed the required packages for the web API:
+  - `fastapi`
+  - `uvicorn`
+- Added them to `requirements.txt` so the environment is reproducible.
+
+**Why / purpose**
+
+- Makes SentinelTi ready to run as a web service, not just a CLI tool.
+- Ensures any future deployment (Render, Fly.io, etc.) can install the same dependencies.
+
+![alt text](<Screenshot 2026-02-11 232954.png>)
+
+***
+
+### 2. Created the SentinelTi FastAPI app
+
+**What we did**
+
+- Added a new module `sentinelti/api.py`.
+- Created a FastAPI app instance:
+
+  ```python
+  app = FastAPI(title="SentinelTi API", version="0.1.0")
+  ```
+
+- Defined request models using Pydantic:
+
+  ```python
+  class ScoreUrlRequest(BaseModel):
+      url: str
+
+  class ScoreUrlsRequest(BaseModel):
+      urls: List[str]
+  ```
+
+**Why / purpose**
+
+- The FastAPI app is the core of the HTTP API, describing available endpoints and metadata.
+- Pydantic models give a clear, validated schema for incoming JSON requests and power the automatic docs.
+
+![alt text](<Screenshot 2026-02-11 233029.png>)
+
+***
+
+### 3. Implemented `/health` endpoint
+
+**What we did**
+
+- Added a simple health‑check route:
+
+  ```python
+  @app.get("/health")
+  async def health():
+      return {"status": "ok"}
+  ```
+
+**Why / purpose**
+
+- Provides a quick way to verify the API is running and reachable.
+- Useful for future monitoring and deployment checks (load balancers, uptime checks, etc.).
+
+![alt text](<Screenshot 2026-02-11 233224.png>)
+
+***
+
+### 4. Implemented `/score-url` endpoint (single URL)
+
+**What we did**
+
+- Added a POST endpoint that scores a single URL by reusing the existing `enrich_score` logic:
+
+  ```python
+  @app.post("/score-url")
+  async def score_url(body: ScoreUrlRequest):
+      return enrich_score(body.url)
+  ```
+
+- Tested it via the interactive docs and curl:
+
+  ```bash
+  curl -X POST "http://127.0.0.1:8000/score-url" \
+    -H "Content-Type: application/json" \
+    -d '{"url": "https://www.google.com"}'
+  ```
+
+- Verified the JSON response includes:
+  - `url`
+  - `label`
+  - `prob_malicious`
+  - `heuristic` (score, reasons, features)
+  - `final_label`
+  - `risk`
+  - `reasons`
+
+**Why / purpose**
+
+- Exposes the core SentinelTi scoring function as a web API for any client (browser, tools, future UI).
+- Keeps a single source of truth for scoring logic (`enrich_score`), shared between CLI and API.
+
+![alt text](<Screenshot 2026-02-11 233337.png>)
+
+***
+
+### 5. Implemented `/score-urls` endpoint (batch)
+
+**What we did**
+
+- Added a batch scoring endpoint:
+
+  ```python
+  @app.post("/score-urls")
+  async def score_urls(body: ScoreUrlsRequest):
+      return {"results": [enrich_score(u) for u in body.urls]}
+  ```
+
+- Tested with a small list:
+
+  ```json
+  {
+    "urls": [
+      "https://www.google.com",
+      "http://198.51.100.23/login"
+    ]
+  }
+  ```
+
+- Confirmed the response is an object with a `results` array, each entry containing the enriched score structure.
+
+**Why / purpose**
+
+- Makes it easy to score multiple URLs in one request, which is useful for browser extensions, log pipelines, or small tools.
+- Mirrors the batch behavior of your CLI `score-file` command, but over HTTP.
+
+![alt text](<Screenshot 2026-02-11 233605.png>)
+
+***
+
+### 6. Ran the API server locally
+
+**What we did**
+
+- Started the server from the project root:
+
+  ```bash
+  uvicorn sentinelti.api:app --host 127.0.0.1 --port 8000
+  ```
+
+- Confirmed:
+  - `/health` returns `"status": "ok"`.
+  - `/docs` shows all three endpoints (`/health`, `/score-url`, `/score-urls`) and their schemas.
+
+**Why / purpose**
+
+- Validates that the integration between FastAPI, Uvicorn, and your scoring code works end‑to‑end.
+- Provides a working local API instance ready for future deployment to a cloud host.
