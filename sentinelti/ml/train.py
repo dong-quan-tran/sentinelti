@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import argparse
+
+from xgboost import XGBClassifier
 
 import joblib
 from sklearn.linear_model import LogisticRegression
@@ -24,6 +27,45 @@ def train_url_model(
     urlhaus_max_malicious: int | None = 1000,
     urlhaus_max_benign: int | None = 1000,
 ) -> None:
+    X, y, feature_names = load_dataset_for_training(
+        use_real_data=use_real_data,
+        csv_path=csv_path,
+        max_samples=max_samples,
+        use_urlhaus=use_urlhaus,
+        urlhaus_max_malicious=urlhaus_max_malicious,
+        urlhaus_max_benign=urlhaus_max_benign,
+    )
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.3,
+        random_state=42,
+        stratify=y,
+    )
+
+    clf = LogisticRegression(max_iter=1000)
+    clf.fit(X_train, y_train)
+
+    y_pred = clf.predict(X_test)
+    print("Evaluation on holdout set (LogisticRegression):")
+    print(classification_report(y_test, y_pred))
+
+    artifact = {
+        "model": clf,
+        "feature_names": feature_names,
+    }
+    joblib.dump(artifact, MODEL_PATH)
+    print(f"Saved model to {MODEL_PATH}")
+
+def load_dataset_for_training(
+    use_real_data: bool = False,
+    csv_path: str | None = None,
+    max_samples: int | None = None,
+    use_urlhaus: bool = False,
+    urlhaus_max_malicious: int | None = 1000,
+    urlhaus_max_benign: int | None = 1000,
+):
     if use_urlhaus:
         if csv_path is None:
             raise ValueError("csv_path is required when use_urlhaus=True (for benigns)")
@@ -46,6 +88,26 @@ def train_url_model(
     else:
         X, y, feature_names = build_dummy_dataset()
 
+    return X, y, feature_names
+
+
+def train_url_model_xgb(
+    use_real_data: bool = False,
+    csv_path: str | None = None,
+    max_samples: int | None = None,
+    use_urlhaus: bool = False,
+    urlhaus_max_malicious: int | None = 1000,
+    urlhaus_max_benign: int | None = 1000,
+) -> None:
+    X, y, feature_names = load_dataset_for_training(
+        use_real_data=use_real_data,
+        csv_path=csv_path,
+        max_samples=max_samples,
+        use_urlhaus=use_urlhaus,
+        urlhaus_max_malicious=urlhaus_max_malicious,
+        urlhaus_max_benign=urlhaus_max_benign,
+    )
+
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
@@ -54,11 +116,24 @@ def train_url_model(
         stratify=y,
     )
 
-    clf = LogisticRegression(max_iter=1000)
-    clf.fit(X_train, y_train)
+    scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
 
+    clf = XGBClassifier(
+        n_estimators=400,
+        max_depth=6,
+        learning_rate=0.1,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        objective="binary:logistic",
+        eval_metric="logloss",
+        scale_pos_weight=scale_pos_weight,
+        n_jobs=-1,
+    )
+
+    clf.fit(X_train, y_train)
     y_pred = clf.predict(X_test)
-    print("Evaluation on holdout set:")
+
+    print("Evaluation on holdout set (XGBoost):")
     print(classification_report(y_test, y_pred))
 
     artifact = {
@@ -69,17 +144,70 @@ def train_url_model(
     print(f"Saved model to {MODEL_PATH}")
 
 
-if __name__ == "__main__":
-    # Training using URLhaus malicious + urldata.csv benign
-    train_url_model(
-        #use_urlhaus=True,
-        #csv_path="data/urldata.csv",  # benign source
-        #urlhaus_max_malicious=1000,
-        #urlhaus_max_benign=1000,
-
-        use_real_data=True,
-        csv_path="data/urldata.csv",
-        max_samples=None,
+def main():
+    parser = argparse.ArgumentParser(description="Train SentinelTi URL model")
+    parser.add_argument(
+        "--model",
+        choices=["logreg", "xgb"],
+        default="xgb",
+        help="Which model to train (logreg or xgb)",
     )
+    parser.add_argument(
+        "--source",
+        choices=["kaggle", "urlhaus", "dummy"],
+        default="kaggle",
+        help="Which data source to use",
+    )
+    parser.add_argument(
+        "--csv-path",
+        default="data/urldata.csv",
+        help="Path to Kaggle/benign CSV file (used for kaggle/urlhaus sources)",
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Optional max samples for Kaggle/dataset",
+    )
+    parser.add_argument(
+        "--urlhaus-max-malicious",
+        type=int,
+        default=1000,
+        help="Max malicious samples from URLhaus",
+    )
+    parser.add_argument(
+        "--urlhaus-max-benign",
+        type=int,
+        default=1000,
+        help="Max benign samples from Kaggle when using URLhaus",
+    )
+
+    args = parser.parse_args()
+
+    use_real_data = args.source == "kaggle"
+    use_urlhaus = args.source == "urlhaus"
+
+    if args.model == "logreg":
+        train_url_model(
+            use_real_data=use_real_data,
+            csv_path=args.csv_path if args.source in ("kaggle", "urlhaus") else None,
+            max_samples=args.max_samples,
+            use_urlhaus=use_urlhaus,
+            urlhaus_max_malicious=args.urlhaus_max_malicious,
+            urlhaus_max_benign=args.urlhaus_max_benign,
+        )
+    else:
+        train_url_model_xgb(
+            use_real_data=use_real_data,
+            csv_path=args.csv_path if args.source in ("kaggle", "urlhaus") else None,
+            max_samples=args.max_samples,
+            use_urlhaus=use_urlhaus,
+            urlhaus_max_malicious=args.urlhaus_max_malicious,
+            urlhaus_max_benign=args.urlhaus_max_benign,
+        )
+
+
+if __name__ == "__main__":
+    main()
 
 
