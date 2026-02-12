@@ -3,3 +3,5 @@ joblib
 pandas
 requests
 tldextract>=5.0.0
+fastapi[standard-no-fastapi-cloud-cli]==0.0.21
+uvicorn==0.40.0
