@@ -36,7 +36,7 @@ def train_url_model(
         if csv_path is None:
             raise ValueError("csv_path is required when use_real_data=True")
         X, y, feature_names = build_real_dataset(
-            csv_path,
+            csv_path=csv_path,
             url_column="url",
             label_column="label",
             benign_label_value="benign",
@@ -72,10 +72,14 @@ def train_url_model(
 if __name__ == "__main__":
     # Training using URLhaus malicious + urldata.csv benign
     train_url_model(
-        use_urlhaus=True,
-        csv_path="data/urldata.csv",  # benign source
-        urlhaus_max_malicious=1000,
-        urlhaus_max_benign=1000,
+        #use_urlhaus=True,
+        #csv_path="data/urldata.csv",  # benign source
+        #urlhaus_max_malicious=1000,
+        #urlhaus_max_benign=1000,
+
+        use_real_data=True,
+        csv_path="data/urldata.csv",
+        max_samples=None,
     )
 
 

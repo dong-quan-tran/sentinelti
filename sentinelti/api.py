@@ -4,7 +4,7 @@ from typing import List
 
 from .scoring import enrich_score  # adjust import if needed
 
-app = FastAPI(title="SentinelTi API", version="0.1.0")
+app = FastAPI(title="SentinelTI API", version="0.1.0")
 
 
 class ScoreUrlRequest(BaseModel):
