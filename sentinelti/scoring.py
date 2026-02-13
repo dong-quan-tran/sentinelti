@@ -11,9 +11,21 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Dict
 
+from urllib.parse import urlparse
+
 from .heuristics import analyze_url
 from .ml.service import score_url as ml_score_url  # adjust path if needed
 
+
+TRUSTED_DOMAINS = {
+    "google.com",
+    "accounts.google.com",
+    "microsoftonline.com",
+    "netflix.com",
+    "paypal.com",
+    "amazon.com",
+    # Add more as we see fit
+}
 
 def enrich_score(url: str) -> Dict[str, Any]:
     """
@@ -35,7 +47,7 @@ def enrich_score(url: str) -> Dict[str, Any]:
     h = float(heur.score)
 
     # Strong ML + strong heuristics => malicious / high
-    if (p >= 0.95 and h >= 2.0) or h >= 3.5:
+    if (p >= 0.90 and h >= 1.5) or h >= 3.5:
         final_label = "malicious"
         risk = "high"
 
@@ -49,8 +61,8 @@ def enrich_score(url: str) -> Dict[str, Any]:
         final_label = "benign"
         risk = "low"
 
-    # Medium risk: either ML is moderately high or heuristics indicate clear phishing structure
-    elif p >= 0.80 or h >= 1.5:
+    # Medium risk: either ML is moderately high or heuristics indicate phishing structure
+    elif p >= 0.60 or h >= 1.5:
         final_label = "suspicious"
         risk = "medium"
 
@@ -60,6 +72,21 @@ def enrich_score(url: str) -> Dict[str, Any]:
             final_label = "suspicious"
             risk = "medium"
         else:
+            final_label = "benign"
+            risk = "low"
+
+    # Trusted domain override: keep well-known legitimate domains benign
+    # unless the model is extremely confident they are malicious.
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+
+    # Use the base domain (last two labels) as a simple heuristic.
+    parts = host.split(".")
+    base_host = ".".join(parts[-2:]) if len(parts) >= 2 else host
+    
+    if base_host in TRUSTED_DOMAINS and p < 0.90:
+        # Only override if heuristics are not extremely scary
+        if h < 2.0:
             final_label = "benign"
             risk = "low"
 
