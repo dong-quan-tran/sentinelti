@@ -1,7 +1,7 @@
 """
 Manual evaluation runner for SentinelTi.
 
-Loads docs/manual_eval_urls.csv, runs enrich_score on each URL,
+Loads data/manual_eval_urls.csv, runs enrich_score on each URL,
 and prints basic confusion counts + sample disagreements.
 """
 
