@@ -5,6 +5,10 @@ import argparse
 
 from xgboost import XGBClassifier
 
+from datetime import datetime
+import json
+import os
+
 import joblib
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
@@ -50,6 +54,34 @@ def train_url_model(
     y_pred = clf.predict(X_test)
     print("Evaluation on holdout set (LogisticRegression):")
     print(classification_report(y_test, y_pred))
+
+    report_dict = classification_report(y_test, y_pred, output_dict=True)
+
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    os.makedirs("docs/model_metrics", exist_ok=True)
+    source = "urlhaus" if use_urlhaus else ("kaggle" if use_real_data else "dummy")
+    metrics_path = f"docs/model_metrics/url_model_{ts}.json"
+
+    metrics = {
+        "model": "logreg",  # or "xgb" in train_url_model_xgb
+        "train_source": {
+            "use_real_data": use_real_data,
+            "use_urlhaus": use_urlhaus,
+            "csv_path": csv_path,
+        },
+        "class_counts": {
+            "train_0": int((y_train == 0).sum()),
+            "train_1": int((y_train == 1).sum()),
+            "test_0": int((y_test == 0).sum()),
+            "test_1": int((y_test == 1).sum()),
+        },
+        "report": report_dict,
+    }
+
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+    print(f"Saved metrics to {metrics_path}")
+
 
     artifact = {
         "model": clf,
@@ -135,6 +167,34 @@ def train_url_model_xgb(
 
     print("Evaluation on holdout set (XGBoost):")
     print(classification_report(y_test, y_pred))
+
+    report_dict = classification_report(y_test, y_pred, output_dict=True)
+
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    os.makedirs("docs/model_metrics", exist_ok=True)
+    source = "urlhaus" if use_urlhaus else ("kaggle" if use_real_data else "dummy")
+    metrics_path = f"docs/model_metrics/url_model_{ts}.json"
+
+    metrics = {
+        "model": "xgb",  # or "xgb" in train_url_model_xgb
+        "train_source": {
+            "use_real_data": use_real_data,
+            "use_urlhaus": use_urlhaus,
+            "csv_path": csv_path,
+        },
+        "class_counts": {
+            "train_0": int((y_train == 0).sum()),
+            "train_1": int((y_train == 1).sum()),
+            "test_0": int((y_test == 0).sum()),
+            "test_1": int((y_test == 1).sum()),
+        },
+        "report": report_dict,
+    }
+
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+    print(f"Saved metrics to {metrics_path}")
+
 
     artifact = {
         "model": clf,

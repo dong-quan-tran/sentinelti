@@ -1,0 +1,41 @@
+{
+  "model": "xgb",
+  "train_source": {
+    "use_real_data": true,
+    "use_urlhaus": false,
+    "csv_path": "data/urldata.csv"
+  },
+  "class_counts": {
+    "train_0": 242016,
+    "train_1": 73106,
+    "test_0": 103722,
+    "test_1": 31331
+  },
+  "report": {
+    "0": {
+      "precision": 0.9711865231997663,
+      "recall": 0.9615703515165539,
+      "f1-score": 0.9663545153742182,
+      "support": 103722.0
+    },
+    "1": {
+      "precision": 0.8768156251931516,
+      "recall": 0.9055567967827391,
+      "f1-score": 0.8909544819356561,
+      "support": 31331.0
+    },
+    "accuracy": 0.9485757443374083,
+    "macro avg": {
+      "precision": 0.9240010741964589,
+      "recall": 0.9335635741496465,
+      "f1-score": 0.9286544986549372,
+      "support": 135053.0
+    },
+    "weighted avg": {
+      "precision": 0.9492933804673187,
+      "recall": 0.9485757443374083,
+      "f1-score": 0.9488624311727301,
+      "support": 135053.0
+    }
+  }
+}

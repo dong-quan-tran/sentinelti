@@ -261,3 +261,14 @@ central `enrich_score(url)` logic.
 ```
 
 In short, SentinelTi ingests real threat intel, uses an ML model for core classification, enhances it with explainable heuristics, and exposes the combined result via a clean CLI (and soon an HTTP API).
+
+### Model metrics
+
+Each training run saves metrics to `docs/model_metrics/`:
+
+- Filename format: `url_model_<model>_<source>_<timestamp>.json`
+- Contains:
+  - Model type (`logreg` or `xgb`)
+  - Data source (`kaggle`, `urlhaus`, or `dummy`)
+  - Train/test class counts
+  - Full `classification_report` as a JSON dict
