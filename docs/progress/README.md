@@ -867,3 +867,77 @@ Now supports commands like:
 python -m sentinelti.ml.train --model xgb --source kaggle --csv-path data/urldata.csv
 
 python -m sentinelti.ml.train --model xgb --source urlhaus --csv-path data/urldata.csv
+
+SentinelTi – Work Session Log (2026‑02‑13)
+1) Manual evaluation wired to new XGBoost model
+Confirmed manual_eval.py loads data/manual_eval_urls.csv and calls enrich_score(url) for each row.
+
+Verified manual eval runs cleanly against the newly trained XGBoost model (url_classifier.joblib).
+
+Observed confusion on the curated set:
+
+benign -> benign: 17
+
+benign -> suspicious: 13
+
+malicious -> malicious: 15
+
+malicious -> suspicious: 7
+
+![alt text](<Screenshot 2026-02-13 234541.png>)
+
+2) Scoring logic tuning (scoring.py)
+Updated enrich_score to refine final_label / risk based on:
+
+Model probability prob_malicious (p).
+
+Heuristic score heur.score (h).​
+
+Key logic changes:
+
+Malicious / high risk when (p >= 0.90 and h >= 1.5) or h >= 3.5.
+
+Benign / low risk when p <= 0.05 and h == 0.0, or p <= 0.10 and h < 1.5.
+
+Suspicious / medium risk when p >= 0.60 or h >= 1.5; otherwise default to benign vs suspicious depending on h.​​
+
+Added a small TRUSTED_DOMAINS list (e.g., google.com, microsoftonline.com, paypal.com, amazon.com, netflix.com) and a post‑processing override:
+
+For base hosts in TRUSTED_DOMAINS with p < 0.90 and h < 2.0, force final_label = "benign", risk = "low".
+
+Hostname extracted via urllib.parse.urlparse(url).hostname.​​
+
+![alt text](<Screenshot 2026-02-13 234700.png>)
+
+3) Training pipeline review and metrics logging (train.py)
+Clarified and documented the training pipeline:
+
+--model {logreg,xgb} controls whether train_url_model (LogisticRegression) or train_url_model_xgb (XGBClassifier) runs.​​
+
+--source {kaggle,urlhaus,dummy} controls data source via load_dataset_for_training:
+
+kaggle → build_real_dataset(csv_path=...).
+
+urlhaus → build_urlhaus_plus_benign_dataset(benign_csv_path=...).
+
+dummy → build_dummy_dataset().
+
+--csv-path selects the Kaggle/benign CSV file (default data/urldata.csv).
+
+Added per‑run metrics logging to both training functions:
+
+After each run, a JSON file is written to docs/model_metrics/ with:
+
+model ("logreg" or "xgb").
+
+train_source (use_real_data, use_urlhaus, csv_path).
+
+Train/test class counts.
+
+Full classification_report as a dict.​​
+
+Updated metrics filenames to include model and source, e.g.:
+
+url_model_xgb_kaggle_<timestamp>.json.
+
+![alt text](<Screenshot 2026-02-13 234726.png>)
