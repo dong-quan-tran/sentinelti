@@ -20,13 +20,19 @@ def fetch_urlhaus_malicious(
     """
     conn = get_connection()
     query = """
-        SELECT value AS url
-        FROM indicators
-        WHERE type = 'url'
-          AND feed_id = (
-              SELECT id FROM feeds WHERE name = 'urlhaus'
-          )
+    SELECT
+        value AS url,
+        first_seen,
+        last_seen,
+        malware_family,
+        tags
+    FROM indicators
+    WHERE type = 'url'
+        AND feed_id = (
+            SELECT id FROM feeds WHERE name = 'urlhaus'
+        )
     """
+
     if max_samples is not None:
         query += " LIMIT ?"
         df = pd.read_sql_query(query, conn, params=(max_samples,))
@@ -39,4 +45,7 @@ def fetch_urlhaus_malicious(
         raise ValueError("No URLhaus indicators found in the database.")
 
     df["label"] = "malicious"
-    return df[["url", "label"]]
+
+    # Keep url + label for existing training, but expose extra fields for future use
+    return df[["url", "label", "first_seen", "last_seen", "malware_family", "tags"]]
+
