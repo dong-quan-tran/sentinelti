@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Literal, Dict, Any
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import APIKeyHeader
@@ -7,12 +7,11 @@ from pydantic import BaseModel
 
 from .scoring import enrich_score  # adjust import if needed
 
-from typing import List, Literal, Dict, Any
-from pydantic import BaseModel
 
 class HeuristicResult(BaseModel):
     score: float
     reasons: List[str]
+
 
 class ScoreResponse(BaseModel):
     schema_version: Literal["1.0"] = "1.0"
@@ -56,23 +55,27 @@ async def health():
     return {"status": "ok", "version": "0.1.0"}
 
 
-@app.post("/score-url", dependencies=[Depends(require_api_key)])
-async def score_url(body: ScoreUrlRequest):
-    result = enrich_score(body.url)
-    return result
-
-
-@app.post("/score-urls", dependencies=[Depends(require_api_key)])
-async def score_urls(body: ScoreUrlsRequest):
-    results = [enrich_score(url) for url in body.urls]
-    return {"results": results}
-
-
 @app.post("/score-url", response_model=ScoreResponse, dependencies=[Depends(require_api_key)])
 async def score_url(body: ScoreUrlRequest):
     result = enrich_score(body.url)
+    result["schema_version"] = "1.0"
     result["meta"] = {"model": "xgb", "source": "kaggle+urlhaus"}
     return result
+
+
+class ScoreUrlsResponse(BaseModel):
+    results: List[ScoreResponse]
+
+
+@app.post("/score-urls", response_model=ScoreUrlsResponse, dependencies=[Depends(require_api_key)])
+async def score_urls(body: ScoreUrlsRequest):
+    results: List[Dict[str, Any]] = []
+    for url in body.urls:
+        r = enrich_score(url)
+        r["schema_version"] = "1.0"
+        r["meta"] = {"model": "xgb", "source": "kaggle+urlhaus"}
+        results.append(r)
+    return {"results": results}
 
 
 if __name__ == "__main__":
